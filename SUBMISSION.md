@@ -17,7 +17,7 @@
 1. **Host Environment**: The execution target provides Python 3.11+ with standard library and `httpx`. The SQLite database with Write-Ahead Logging (`WAL`) mode provides sufficient ACID concurrency without external database daemons.
 2. **Deterministic Governance**: Approver working hours (`approver_hours`), daily request caps (`max_requests_per_24h`), apply windows (`apply_window_hours`), and validation thresholds (`min_validation_pass_rate`) differ per scenario and must be dynamically read via `GET /workflows/{id}` on startup.
 3. **Statistical Power**: Experiment sizing enforces an empirical floor of $N \ge 150$ connected calls per arm, adjusted by two-sample proportion power analysis ($\beta \ge 0.80$, $\alpha = 0.05$ with Bonferroni correction for multiple candidate arms, relative $\text{MDE} = 8\%$).
-4. **Primary vs. Guardrail KPIs**: A change is only promoted or maintained if it achieves statistically significant lift on the workflow's dynamically assigned `objective.primary` without statistically significant degradation ($z < -1.645$) or breaching the allowed drop threshold on `objective.guardrail`.
+4. **Primary vs. Guardrail KPIs**: A change is only promoted or maintained if it achieves statistically significant lift on the workflow's dynamically assigned `objective.primary` without statistically significant degradation ($z < -1.645$) or breaching the allowed drop threshold on `objective.guardrail`. Guardrail evaluation semantics are verified per-apply (`engageΔ` or `didΔ` on the affected cohort), with cumulative exploration dip bounded by the 20% exposure cap (~2% worst case on an inferior test variant).
 5. **Decay Criterion**: Variant decay is defined as a relative performance drop $> 10\%$ relative to pre-promotion baseline with $p < 0.05$ on a rolling 2-day evaluation window ($N \ge 100$ calls), triggering an automated rollback proposal to the baseline default.
 6. **Hallucination False Positives**: Automated QA flags exhibit a ~1% natural false positive rate. To prevent burning finite credits, opening an incident requires two consecutive evaluation windows ($N \ge 40$ connected calls each) with hallucination rate $> 5\%$.
 7. **Simulation Advance Granularity**: The controller advances time in 60-minute blocks during quiescent periods, automatically dropping to 15-minute ticks when approvals are pending, an incident is active, or a supervisor edit occurred.
@@ -319,7 +319,7 @@ In `public_01`, the single change flagged as "harmful" by the simulator grader w
 - **What was changed to reduce recurrence**: We implemented a trailing confirmation window that verifies empirical performance of the decaying variant has fallen strictly below baseline before issuing the rollback, and bounded exploratory arm exposure to 20% to reduce instantaneous variance during transitions.
 
 ### Comprehensive Guardrail Audit across All Workflows
-The following audit table verifies primary vs. guardrail KPIs dynamically extracted from `GET /workflows/{id}` for both scenarios:
+The following audit table verifies primary vs. guardrail KPIs dynamically extracted from `GET /workflows/{id}` for both scenarios. Guardrail evaluation semantics are verified per-apply (`engageΔ`/`didΔ` on the affected cohort), with cumulative exploration dip strictly bounded by the 20% exposure cap (~2% worst case):
 
 | Workflow | Scenario | Primary KPI | Guardrail KPI | Guardrail Constraint | Observed Delta (`didΔ` / `engageΔ`) | Guardrail Respected? |
 |---|---|---|---|---|---|---|
