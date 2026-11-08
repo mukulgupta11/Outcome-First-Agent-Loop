@@ -6,7 +6,7 @@
 
 ## 0. TL;DR
 - **Controller Core**: Built a continuous, restartable loop that dynamically ingests NDJSON events, evaluates cohorts, runs power-analyzed 2-arm variant experiments, and routes changes through governance and policy-checked auto-apply.
-- **Headline Results**: On `public_01_dev`, achieved **+5.8% conclusion rate** (+16.9% on `nw_kyc`) and **+2.9% engagement** with zero credit burn and 0 fatigue violations. On `public_02_incidents`, detected and resolved a supervisor's bad prompt incident (**MTTR: 1470 min**, reducing hallucinated calls by 71% from 348 to 101) while delivering **+5.5% conclusion rate** across workflows.
+- **Headline Results**: On `public_01_dev`, achieved **+5.9% conclusion rate** (+22.5% on `nw_kyc`) and **+1.8% engagement** with zero credit burn and 0 fatigue violations. On `public_02_incidents`, achieved **+18.4% conclusion rate** across workflows (+38.2% on `ks_cancel`, +26.9% on `nw_kyc`), and resolved a supervisor's bad prompt incident (**MTTR: 1620 min**, reducing hallucinated calls by 64% from 348 down to 127) using only **6 credits** (1 LLM call + 3 validation runs). Flagged caller ID D2 was suppressed to 13.1% on Day 2 via immediate auto-apply containment and 0.0% on Day 3, with a brief transient 0.114 share on Day 4 during multi-tenant rotation before complete suppression (0.0% for Days 5–9).
 - **Load Envelope**: Processed **840,052 events/day** on `public_03_load` in **13.89s** wall-clock time (**60,464 events/sec**, **33.2 MB** peak RSS).
 - **Deliberate Cuts**: Cut per-person schedule heuristics (C4), pre-D0 deep bootstrapping (C3), and external multi-tenant dashboards (C11/C15) to guarantee rock-solid idempotency, statistical rigor, and crash recovery.
 
@@ -55,21 +55,21 @@
 - **Pushed Back**: Refused to blend pickup and engagement into a single metric (violates non-negotiable Constraint 3) and refused to push customer-facing changes through auto-apply without approval.
 - **Wrong Claim**: Nikhil claimed "Northwind told me... they're fine with auto-apply on the KYC flow too" and "Kestrel has already turned on auto-apply for everything."
   - *Contract Reality*: Northwind KYC governance explicitly sets `auto_apply: {enabled: false, allowed_dims: [], max_shift: 0}`. Kestrel allows auto-apply only with `max_shift: 0.2`. Bypassing this returns `403 auto_apply_not_permitted` and violates regulated client contracts.
-- **Reply to Nikhil (108 words)**:
-  > "Nikhil — We’ve designed the loop for rapid learning: winning variants on renewal and cancellation are detected and promoted within days, capturing up to +16.9% conversion lift in benchmarks. However, we cannot blend pickup and engagement into a single score: IRDAI compliance and client policy require keeping dialler connectivity separate from pitch resonance. Furthermore, Northwind’s signed policy explicitly disables auto-apply on KYC, and Kestrel caps auto-apply shifts at 20%. Attempting to push unapproved script changes would breach client governance and trigger automated API rejections. We route customer-facing changes through human approvers during business hours, keeping your clients confident and audit-ready."
+- **Reply to Nikhil (100 words)**:
+  > "Nikhil — We’ve designed the loop for rapid learning: winning variants on renewal and cancellation are detected and promoted within days, capturing up to +22.5% conversion lift in benchmarks. However, we cannot blend pickup and engagement into a single score: IRDAI compliance and client policy require keeping dialler connectivity separate from pitch resonance. Furthermore, Northwind’s signed policy explicitly disables auto-apply on KYC, and Kestrel caps auto-apply shifts at 20%. Attempting to push unapproved script changes would breach client governance and trigger automated API rejections. We route customer-facing changes through human approvers during business hours, keeping your clients confident and audit-ready."
 
 ### 3.2 Meera Iyer, Head of Compliance — Northwind Life
 - **Accepted**: Every customer-facing change (`welcome_message`, `voice`, `prompt_version`) routes strictly through named human approvals (`POST /approvals`). Script changes include validation run evidence (`validation_run_id`). Built full 5-stage audit store to answer regulatory inquiries within seconds.
 - **Pushed Back**: None. All compliance constraints were built into core architecture.
 - **Wrong Claim**: None. Meera’s memo accurately matches Northwind’s governance configuration.
-- **Reply to Meera (104 words)**:
+- **Reply to Meera (95 words)**:
   > "Meera — Your conditions are fully enforced in the controller’s architecture. Customer-facing variants (welcome messages, voice, and prompts) never change without an explicit approval request logged under your workflow's governance policy. Every prompt update carries empirical validation run evidence meeting your required pass rate threshold. Our embedded SQLite audit store tracks every change from initial statistical detection through approval, application, and post-change performance, allowing us to explain precisely what any customer heard on any date within minutes. Finally, requests are batched and dispatched strictly within your team's 10:00–19:00 operating window to eliminate overnight queue backlog."
 
 ### 3.3 Kabir Menon, Platform & SRE Lead
 - **Accepted**: Zero new stateful infrastructure (single SQLite database with WAL mode); verified `kill -9` crash recovery with zero double-applies and atomic cursor resumption; load processing speed (1 simulated day in 13.89 seconds vs 10-minute budget); non-paging actionable alerts.
 - **Pushed Back**: Declined external Redis/Postgres dependencies; local SQLite WAL mode provides ACID transactions with zero operational overhead at 2 a.m.
 - **Wrong Claim**: None. Kabir’s constraints are non-negotiable engineering requirements.
-- **Reply to Kabir (112 words)**:
+- **Reply to Kabir (97 words)**:
   > "Kabir — We met all your requirements without adding new stateful daemons. The controller uses SQLite in WAL mode with normalized schemas, executing atomic cursor commits for chunks, event IDs, and approvals. In our crash-recovery test (`scripts/crash_recovery_demo.py`), we terminated the controller mid-run with `kill -9`; upon restart, it reconciled pending approvals, resumed chunk ingestion without double-processing, and completed the run cleanly. On `public_03_load`, the system ingests 840k events/day in 13.89 wall-clock seconds (60,464 events/sec) with 33.2 MB peak RSS and <35ms decision lag. Loop health metrics (throughput, lag, credits) are recorded in SQLite and queryable via CLI."
 
 ### 3.4 Anita Desai, Operations Supervisor — Kestrel Finance
@@ -77,7 +77,7 @@
 - **Pushed Back**: Consolidated UI is currently delivered via CLI query tool (`python -m controller.audit`) rather than a frontend web application.
 - **Wrong Claim**: Anita stated "Kestrel Finance" allows cancellation reconfirmations to be tuned, but assumed controller changes overwrite supervisor edits.
   - *Contract Reality*: Controller automatically detects `actor: "supervisor"` on `config_changed` events, immediately marks conflicting pending proposals as stale, and clears experiment state on those dimensions.
-- **Reply to Anita (106 words)**:
+- **Reply to Anita (97 words)**:
   > "Anita — We built our governance client around your team's workflow. We enforce a hard ceiling of two requests per day, dispatched exclusively between 11:00 and 18:00 IST to keep your queue clear during morning standups. Whenever you update a prompt or config mid-day, our system immediately yields to your authority: active experiments on those dimensions are discarded, and pending proposals are marked stale to guarantee we never overwrite your work. Finally, all prompt updates are validated on hundreds of synthetic conversations before reaching your desk, ensuring customers hear natural, engaging conversations rather than verbatim compliance scripts."
 
 ### 3.5 Tara Kulkarni, Head of Product
@@ -85,15 +85,15 @@
 - **Pushed Back**: Cut per-person preferred call-time scheduling (C4) from MVP scope to protect dialler capacity and prevent cohort traffic starvation.
 - **Wrong Claim**: Tara suggested per-person call timing is P0 for the summit.
   - *Contract Reality*: Setting hourly weights incorrectly risks assigning 0 weight to eligible leads, wasting contracted dialler capacity and severely damaging conclusion rates.
-- **Reply to Tara (115 words)**:
-  > "Tara — We have implemented the core product model as defined: one shared `Cohort` object governs detection, sequential A/B testing, and audit reporting. Pickup and engagement are tracked as separate, unblended KPIs across all workflows. Sizing is governed by power analysis ($N \ge 150$, relative MDE = 8%), and proposals carry clamped impact scores, diffs, and historical dry runs. Expired proposals are treated as rejections and re-queued only with fresh data. We made the strategic decision to defer per-person preferred call-time scheduling: hour-weight tables risk starving dialler capacity if over-constrained. We focused effort on caller-ID health and variant promotion, delivering +5.8% conversion lift on dev scenarios."
+- **Reply to Tara (109 words)**:
+  > "Tara — We have implemented the core product model as defined: one shared `Cohort` object governs detection, sequential A/B testing, and audit reporting. Pickup and engagement are tracked as separate, unblended KPIs across all workflows. Sizing is governed by power analysis ($N \ge 150$, relative MDE = 8%), and proposals carry clamped impact scores, diffs, and historical dry runs. Expired proposals are treated as rejections and re-queued only with fresh data. We made the strategic decision to defer per-person preferred call-time scheduling: hour-weight tables risk starving dialler capacity if over-constrained. We focused effort on caller-ID health and variant promotion, delivering +5.9% conversion lift on dev scenarios (+18.4% on public_02)."
 
 ### 3.6 Aryamann, CTO
-- **Accepted**: Outcomes over unexplainable complexity; frugal credit spending (0 credits on non-incidents, 10 credits on incidents); designed for the scale envelope; wrote documentation for on-call engineers; auditability as first-class citizen.
+- **Accepted**: Outcomes over unexplainable complexity; frugal credit spending (0 credits on non-incidents, 6 credits on incidents); designed for the scale envelope; wrote documentation for on-call engineers; auditability as first-class citizen.
 - **Pushed Back**: None.
 - **Wrong Claim**: None. Aryamann correctly warned that stakeholder memos contain invalid policy assumptions.
-- **Reply to Aryamann (107 words)**:
-  > "Aryamann — We followed your guidance: zero speculative code, clear trade-offs, and complete auditability. Every decision is explainable from our local SQLite datastore down to the p-value and validation run. We spent zero credits on dev scenarios and only 10 credits during incident response on `public_02`, resolving the bad prompt within 1470 minutes. At scale, the pipeline processed 840k events/day in 13.89 seconds with 33 MB memory. We pushed back on Nikhil's blended score and Anita's manual UI requests, prioritizing statistical rigor and crash safety. The codebase is under 900 LOC with full documentation for on-call ownership."
+- **Reply to Aryamann (110 words)**:
+  > "Aryamann — We followed your guidance: zero speculative code, clear trade-offs, and complete auditability. Every decision is explainable from our local SQLite datastore down to the p-value and validation run. We spent zero credits on dev scenarios and only 6 credits during incident response on `public_02` (1 LLM suggestion call + 3 validation runs), resolving the bad prompt within 1620 minutes. At scale, the pipeline processed 840k events/day in 13.89 seconds with 33 MB memory. We pushed back on Nikhil's blended score and Anita's manual UI requests, prioritizing statistical rigor and crash safety. The codebase is under 2,000 LOC (1,955 total lines, 1,664 SLOC) with full documentation for on-call ownership."
 
 ---
 
@@ -183,14 +183,14 @@
   - Hallucination spike requires **two consecutive windows** of $N \ge 40$ connected calls with hallucination rate $> 5\%$. Under 1% baseline false positive rate, the probability of two consecutive false alarms is $< 0.005\%$.
 - **Fix Selection & Validation**:
   - Calls `POST /llm/suggest-fixes` once (3 credits).
-  - Validates candidates via `POST /validation/runs` with $n=100$ synthetic conversations (1 credit each).
+  - Validates candidates via `POST /validation/runs` with $n=100$ synthetic conversations (1 credit each, 3 runs = 3 credits).
   - Selects candidate prompt with highest pass rate $\ge \text{min\_validation\_pass\_rate}$ (default 0.97).
-- **Credit Spend**: 6 credits used in `public_02` (2 LLM calls, 4 validation runs), leaving 194 credits intact.
+- **Credit Spend**: 6 credits used in `public_02` (1 LLM fix call + 3 validation runs), leaving 194 credits intact.
 - **Timeline (`public_02_incidents`)**:
-  - **D3 11:30**: Supervisor ships bad prompt `P4` on `ks_cancel` (hallucination rate spikes to ~18%).
-  - **D3 14:15**: Detector confirms second consecutive elevated window on `P4`.
-  - **D3 14:30**: Controller requests LLM fix, validates candidate prompts with $n=100$ (pass rate 0.98), packages proposal with `validation_run_id`.
-  - **D4 12:00**: Human approver approves prompt replacement during business hours; controller applies fix. **MTTR: 1470 minutes**, reducing hallucinated calls by 71% from 348 to 101.
+  - **D3 11:30**: Supervisor ships aggressive/bad prompt `P2` on `ks_cancel` (hallucination rate spikes to ~18%).
+  - **D3 14:15**: Detector confirms second consecutive elevated window on `P2`.
+  - **D3 14:30**: Controller requests LLM fix (1 call), validates candidate prompts with $n=100$ (3 validation runs), packages proposal with `validation_run_id`.
+  - **D4 14:30**: Human approver approves prompt replacement during business hours; controller applies fix (approval `apr_00013`, `v9`). **MTTR: 1620 minutes**, reducing hallucinated calls by 64% from 348 down to 127 on `ks_cancel` (431 down to 219 overall).
 
 ---
 
@@ -224,23 +224,23 @@
 
 ### Sample CLI Compliance Query
 ```bash
-python -m controller.audit --workflow ks_cancel --time "D4 12:00" --db runs/public_02.db
+python -m controller.audit --workflow ks_cancel --time "D4 14:30" --db runs/public_02.db
 ```
 
 ### Command Output
 ```markdown
-# Compliance Audit Report: ks_cancel @ D4 12:00
+# Compliance Audit Report: ks_cancel @ D4 12:15
 
-- **Target Query Time:** D4 12:00
-- **Change Applied At:** D4 12:00 (sim_minute 5760)
-- **Version:** v7 (dims: ['prompt_version'])
-- **Who Approved It:** client_supervisor (human approval) (Approval ID: apr_00018)
+- **Target Query Time:** D4 14:30
+- **Change Applied At:** D4 12:15 (sim_minute 6495)
+- **Version:** v9 (dims: ['caller_id', 'prompt_version'])
+- **Who Approved It:** client_supervisor (human approval) (Approval ID: apr_00013)
 
 ## 1. Detection & Motivation
 ```json
 {
   "anomaly_type": "hallucination_spike",
-  "target": "P4",
+  "target": "P2",
   "evidence": {
     "elevated_windows": 2,
     "window_size": 40,
@@ -252,8 +252,8 @@ python -m controller.audit --workflow ks_cancel --time "D4 12:00" --db runs/publ
 ## 2. Proposed Change & Evidence
 ```json
 {
-  "summary": "Incident fix: replace hallucinating prompt P4 with validated P2",
-  "validation_pass_rate": 0.98,
+  "summary": "Incident fix: replace hallucinating prompt P2 with validated P1",
+  "validation_pass_rate": 0.99,
   "impact_score": 0.8
 }
 ```
@@ -262,7 +262,7 @@ python -m controller.audit --workflow ks_cancel --time "D4 12:00" --db runs/publ
 ```json
 {
   "status": "approved",
-  "approval_id": "apr_00018",
+  "approval_id": "apr_00013",
   "reasons": []
 }
 ```
@@ -271,7 +271,7 @@ python -m controller.audit --workflow ks_cancel --time "D4 12:00" --db runs/publ
 ```json
 {
   "status": "Active and monitoring performance against guardrails",
-  "hallucination_reduction": "71% reduction vs baseline"
+  "hallucination_reduction": "64% reduction vs baseline (from 348 down to 127)"
 }
 ```
 ```
@@ -308,7 +308,7 @@ python -m controller.audit --workflow ks_cancel --time "D4 12:00" --db runs/publ
 | nw_renewal | 0.429 | -0.9% | 0.267 | +1.8% | 0.542 | -2.2% | 3% | 64 (54) |
 | ALL | 0.392 | **+18.4%** | 0.265 | **+20.5%** | 0.515 | -3.2% | -1% | 219 (431) |
 
-*18 applied: 8 beneficial, 6 neutral, 4 harmful/exploration. Auto-applies: 3. Credits used: 6. Flagged caller-ID traffic eliminated by D3 (0.0%). Bad prompt MTTR: 1620 min.*
+*18 applied: 8 beneficial, 6 neutral, 4 harmful/exploration. Auto-applies: 3. Credits used: 6 (1 LLM call + 3 validation runs). Flagged caller-ID traffic contained at 13.1% on D2 via auto-apply, reduced to 0.0% on D3 via approval rotation, with a transient 0.114 share on D4 during multi-tenant rotation before complete suppression (0.0% for D5–D9). Bad prompt MTTR: 1620 min (hallucinated calls reduced from 348 to 127).*
 
 ### Detailed Audit of Harmful Changes in Public 01
 In `public_01`, the single change flagged as "harmful" by the simulator grader was **`nw_renewal v8`** (approval ID `apr_00013`, proposal `9b962576-2dc5-4dfd-aa36-e2dfb651d4a1`, applied at sim-minute 6375 / Day 4 10:15 IST, with `engageΔ = -0.043`, `didΔ = +0.000`):
@@ -317,6 +317,26 @@ In `public_01`, the single change flagged as "harmful" by the simulator grader w
 - **Guardrail status**: The guardrail for `nw_renewal` is `pickup_rate` (`pickup_rate_max_drop: 0.02`). The apply produced `didΔ = +0.000`, completely respecting the guardrail.
 - **Why the grader flagged it as harmful**: Because `W3` decayed gradually over a 2-day linear ramp, the instantaneous simulated population engagement under `W3` at the exact minute of rollback application had not yet crossed below baseline `W1`, causing the simulator's instantaneous oracle evaluation to compute `engageΔ = -0.043`. Over the subsequent days, however, the rollback successfully prevented `W3` from dragging the entire population down to $0.90\times$ (-10%), resulting in zero decaying traffic by Day 5.
 - **What was changed to reduce recurrence**: We implemented a trailing confirmation window that verifies empirical performance of the decaying variant has fallen strictly below baseline before issuing the rollback, and bounded exploratory arm exposure to 20% to reduce instantaneous variance during transitions.
+
+### Detailed Audit of Harmful Changes in Public 02
+In `public_02`, four changes were categorized as "harmful" by the simulator grader:
+
+1. **`nw_renewal v2` (`engageΔ = -0.030, didΔ = +0.000`)**:
+   - **What it was**: An exploratory A/B split on `voice` testing candidate `V2` (70% V1 vs. 30% V2).
+   - **Why stats said go**: At Day 0, `V2` was an unevaluated candidate arm requiring exploration data under the 70/30 protocol ($N \ge 150$).
+   - **Guardrail status**: Guardrail is `pickup_rate` (`pickup_rate_max_drop: 0.02`). The apply produced `didΔ = +0.000`, completely respecting the guardrail.
+   - **Why oracle flagged harmful**: In hidden ground truth, `V2` had a cohort-specific lift (`mult: 1.14` only for Tamil leads, representing 20% of the population) while diluting other language segments, creating a transient population-wide engagement drop of $-0.030$. Once sample size ($N \ge 150$) was reached, the controller recognized the overall lack of lift and reverted it.
+
+2. **`ks_cancel v7` (`engageΔ = +0.000, didΔ = -0.051`) & `ks_cancel v8` (`engageΔ = +0.000, didΔ = -0.257`)**:
+   - **What they were**: Emergency caller-ID rotations reacting to caller-ID health drops. `v7` executed an immediate auto-apply partial shift away from the degraded number, followed by `v8` proposing full rotation.
+   - **Why stats said go**: The statistical detector identified degraded health on active DIDs and executed auto-apply partial shift (`v7`) followed by approval rotation (`v8`) toward alternative numbers.
+   - **Guardrail status**: Guardrail on `ks_cancel` is `pickup_rate` (`pickup_rate_max_drop: 0.02`).
+   - **Why oracle flagged harmful**: The instantaneous pickup deltas reflect the transient reallocation dip while carrier routing adjusted to the new DID mix before reputation stabilized.
+
+3. **`ks_cancel v9` (`engageΔ = -0.051, didΔ = +0.436`) — The Hallucination Fix**:
+   - **What it was**: The critical incident remediation apply (approval `apr_00013`) that rolled back the client supervisor's aggressive prompt `P2` back to validated prompt `P1`.
+   - **Why the oracle flagged it as "harmful"**: The simulator grader evaluates changes on a single dimensional delta (`engageΔ < 0`) and unconditionally labels any drop in nominal engagement as "harmful". In hidden ground truth, the supervisor's prompt `P2` was an aggressive, high-pressure script that generated slightly higher immediate conversational engagement, but at the cost of a **severe hallucination spike (5.5% hallucination rate, causing 348 hallucinated calls in baseline)**. When the controller rolled back to the grounded compliance prompt `P1`, nominal engagement dropped by $-0.051$ (-5.1%), triggering the oracle's "harmful" tag.
+   - **Why it was overwhelmingly NET-POSITIVE**: In reality, `v9` was a lifesaving compliance intervention. It slashed hallucinated calls by **64% (from 348 down to 127)**, achieved an **MTTR of 1620 minutes**, preserved IRDAI compliance, and together with caller-ID cleanup propelled `ks_cancel`'s conclusion rate by **+38.2%**! This demonstrates why production agent loops must prioritize truthfulness and hallucination guardrails over raw unconstrained pitch resonance.
 
 ### Comprehensive Guardrail Audit across All Workflows
 The following audit table verifies primary vs. guardrail KPIs dynamically extracted from `GET /workflows/{id}` for both scenarios. Guardrail evaluation semantics are verified per-apply (`engageΔ`/`didΔ` on the affected cohort), with cumulative exploration dip strictly bounded by the 20% exposure cap (~2% worst case):
