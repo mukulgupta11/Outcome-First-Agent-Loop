@@ -1,6 +1,6 @@
 # Outcome-First Agent Loop — Submission
 
-**Name:** Senior Python Engineer · **Date:** 2026-11-07 · **Hours actually spent (be honest):** 14 hours · **Language / storage:** Python 3.11+ / SQLite3 (WAL mode)
+**Name:** Mukul Gupta · **Date:** 2026-11-08 · **Time spent :** 14 hours · **Language / storage:** Python 3.11+ / SQLite3 (WAL mode)
 
 ---
 
